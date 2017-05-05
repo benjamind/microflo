@@ -131,6 +131,7 @@ struct MqttOptions {
     int keepaliveSeconds;
     char * clientId;
     ParticipantInfo info;
+    int discoveryInterval; // seconds
 };
 
 
@@ -236,6 +237,12 @@ public:
                 LOG("mosquitto loop error: %s\n", mosquitto_strerror(status));
                 return false;
             }
+
+            const float sendInterval = (float)mount->options.discoveryInterval/2.5;
+            if (time(NULL) - mount->discoveryMessageSent > sendInterval) {
+                mount->sendDiscovery();
+                mount->discoveryMessageSent = time(NULL);
+            }
         }
         return true;
     }
@@ -245,6 +252,7 @@ public:
         : network(net)
         , options(o)
         , connection(NULL)
+        , discoveryMessageSent(0)
     {
         network->setNotificationHandler(this);
     }
@@ -277,6 +285,7 @@ public:
         if (connected) {
             subscribePorts();
             sendDiscovery();
+            discoveryMessageSent = time(NULL);
         }
     }
 
@@ -394,6 +403,7 @@ private:
     Network *network;
     MqttOptions options;
     struct mosquitto *connection;
+    time_t discoveryMessageSent;
 };
 
 bool parse_brokerurl(MqttOptions *options, const char *url) {
@@ -418,6 +428,7 @@ bool mqttParseOptions(MqttOptions *options, int argc, char **argv) {
     options->brokerHostname = strndup("localhost", 99);
     options->brokerPort = 1883;
     options->keepaliveSeconds = 60;
+    options->discoveryInterval = 60;
     options->clientId = NULL; // MQTT will autogenerate
     options->info.role = "micro";
     options->info.component = "MicroFloDevice";
